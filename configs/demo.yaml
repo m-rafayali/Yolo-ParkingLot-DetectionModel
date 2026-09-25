@@ -1,0 +1,99 @@
+# ParkWatch demo configuration: the synthetic 3-camera car park ("digital twin").
+# Generate the footage first:   python tools/make_demo_videos.py
+# Then run:                     python run_demo.py            (dashboard on http://localhost:8000)
+
+site:
+  name: "Demo Car Park (digital twin)"
+  capacity: 24                 # bays in the whole site; P1 is counted at the gates: free = capacity - (in - out)
+  initial_occupancy: 10        # cars already inside when the system starts (operator enters this once)
+  overstay_limit_min: 60       # business rule: 1 hour
+  alert_unknown_arrival: false # cars parked before start-up have no known arrival time -> show, don't alert
+
+clock:
+  start: "2026-09-25 08:00:00" # site time at the first frame of the footage
+  # Demo only: 1 second of footage counts as 60 seconds on the site clock, so the real 1-hour rule
+  # can be shown in a 3-minute clip. Detection timings (stationary seconds etc.) stay in real video time.
+  # Production / live cameras: 1.
+  time_scale: 60
+
+models:
+  device: null                 # null = auto (GPU if available), or "cpu", 0, "mps"
+  tracker: configs/trackers/botsort_parking.yaml
+  ground:                      # gate cameras: stock COCO model, vehicle classes only
+    weights: yolo11s.pt
+    imgsz: 512                 # vehicles at a gate are large in frame: a smaller input is faster on CPU
+    conf: 0.25
+    classes: [car, truck, bus, motorcycle]
+  overhead:                    # lot camera: OBB model fine-tuned on the twin (tools/train_twin.py).
+    weights: models/twin_obb.pt  # for real drone/aerial footage use the stock yolo11s-obb.pt instead
+    imgsz: 640
+    conf: 0.3
+    classes: [vehicle, small vehicle, large vehicle]
+
+plates:
+  format: sg                   # sg = Singapore checksum validation | generic | none
+  hint: "Plates here are Singapore format, e.g. SBA1234K (1-3 letters, 1-4 digits, 1 checksum letter)."
+  providers: [llm, local]      # tried in order; put `local` first to pay only for the hard cases
+  max_attempts_per_vehicle: 2  # best crop, then second-best crop, only if the first read fails validation
+  min_confidence: 0.4
+  workers: 2
+  llm:                         # Ultralytics LLM class -> any OpenAI-compatible endpoint
+    model: gemini-2.5-flash-lite
+    fallback_models: [gemini-2.5-flash, gemini-2.0-flash]   # rotated on 429 / 503
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    api: chat.completions
+    api_key_env: GEMINI_API_KEY
+    timeout_s: 20
+    cost_per_call_usd: 0.001   # for the live cost counter only
+    request_params: {}         # e.g. {max_tokens: 200}
+    # Local, no data egress (Ollama):  model: qwen2.5vl:7b   base_url: http://localhost:11434/v1   api_key_env: null
+  local: {}                    # fast-alpr: ONNX plate detector + OCR on CPU, free and offline
+
+linking:
+  entry_to_lot_s: [0.5, 45]    # a car crossing the entry line appears in the lot view within this window
+  lot_to_exit_s: [0, 60]       # a car leaving the lot view reaches the exit line within this window
+  fuzzy_plate_edits: 1         # exit read may differ from the entry read by 1 character
+
+alerts:
+  console: true
+  webhook_url: null            # e.g. a Slack / Teams incoming-webhook URL to notify enforcement staff
+  repeat_every_min: 0          # 0 = alert once per vehicle
+
+dashboard:
+  enabled: true
+  host: 127.0.0.1              # 0.0.0.0 to show the dashboard on other machines on the network
+  port: 8000
+
+output:
+  dir: runs
+  save_video: true             # runs/<timestamp>/annotated_mosaic.mp4 - a recording to show if live fails
+
+ground_truth: ../assets/demo/ground_truth.json   # synthetic clip only: prints an accuracy report at the end
+
+cameras:
+  - id: entry
+    name: "CAM-01 Entry gate"
+    role: entry
+    source: ../assets/demo/entry_cam.mp4          # file path, RTSP URL (rtsp://...) or webcam index (0)
+    geometry: ../assets/demo/scene_geometry.json#entry
+    direction: down            # count only vehicles moving down the image across the line
+    stride: 2                  # 7.5 inferences/s is enough to catch a line crossing
+
+  - id: lot
+    name: "CAM-02 Car park overview"
+    role: lot
+    source: ../assets/demo/lot_cam.mp4
+    geometry: ../assets/demo/scene_geometry.json#lot   # bay polygons + entry/exit zones
+    stride: 3                  # the lot changes slowly: 5 inferences/s is plenty
+    stationary_seconds: 4      # still this long (real seconds) -> PARKED
+    stationary_px: 10
+    moved_px: 30
+    reid_radius_px: 45         # a new track this close to a parked car IS that car
+
+  - id: exit
+    name: "CAM-03 Exit gate"
+    role: exit
+    source: ../assets/demo/exit_cam.mp4
+    geometry: ../assets/demo/scene_geometry.json#exit
+    direction: down
+    stride: 2

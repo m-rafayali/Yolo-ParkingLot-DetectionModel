@@ -1,0 +1,15 @@
+# Core (Python 3.10+). ultralytics pulls in PyTorch; on an NVIDIA GPU install the CUDA build of torch first:
+#   https://pytorch.org/get-started/locally/
+ultralytics>=8.4.0      # YOLO11 / YOLO26, BoT-SORT tracking, and the LLM class (OpenAI-compatible)
+openai>=2.0             # used by ultralytics.LLM for Gemini / OpenAI / Ollama / vLLM endpoints
+opencv-python>=4.9      # GUI build (needed for --show and tools/draw_zones.py)
+numpy
+pyyaml
+requests
+
+# Free, offline plate reader (ONNX plate detector + OCR). Downloads ~11 MB of models on first use.
+fast-alpr>=0.3
+
+# Optional
+imageio-ffmpeg          # H.264 encoding of the generated demo videos (smaller, browser-playable)
+pytest                  # tests

@@ -1,0 +1,61 @@
+# Template for YOUR footage or live cameras. Copy, edit, then:  python run_demo.py --config configs/my_site.yaml
+# 1. Draw lines / bays / zones on a frame of each camera:
+#      python tools/draw_zones.py --source <gate video or rtsp> --camera entry --out configs/my_site_geometry.json
+#      python tools/draw_zones.py --source <lot video or rtsp>  --camera lot   --out configs/my_site_geometry.json
+# 2. Fill in the sources below. Any camera can be omitted (e.g. gates only, or lot only).
+
+site:
+  name: "Client car park"
+  capacity: 100
+  initial_occupancy: 0
+  overstay_limit_min: 60
+  alert_unknown_arrival: false
+
+clock:
+  start: null        # null = now. For recorded clips you may set the recording's start time, e.g. "2026-09-20 10:27:00"
+  time_scale: 1      # always 1 for real footage
+
+models:
+  device: null
+  tracker: configs/trackers/botsort_parking.yaml
+  ground: {weights: yolo11s.pt, imgsz: 640, conf: 0.25, classes: [car, truck, bus, motorcycle]}
+  # Real drone / high-mast overhead footage: stock DOTA OBB weights ("small vehicle" / "large vehicle").
+  # Use imgsz 1024+ when cars are small in the frame.
+  overhead: {weights: yolo11s-obb.pt, imgsz: 1024, conf: 0.25, classes: [small vehicle, large vehicle]}
+
+plates:
+  format: sg                                   # or generic
+  hint: "Plates here are Singapore format, e.g. SBA1234K."
+  providers: [llm, local]
+  llm:
+    model: gemini-2.5-flash-lite
+    fallback_models: [gemini-2.5-flash, gemini-2.0-flash]
+    base_url: https://generativelanguage.googleapis.com/v1beta/openai/
+    api_key_env: GEMINI_API_KEY
+
+alerts:
+  webhook_url: null
+
+dashboard: {enabled: true, host: 0.0.0.0, port: 8000}
+
+cameras:
+  - id: entry
+    name: "Entry gate"
+    role: entry
+    source: rtsp://user:pass@192.168.1.20:554/stream1     # or a video file path
+    geometry: my_site_geometry.json#entry
+    direction: down            # direction vehicles move in the image when ENTERING
+  - id: lot
+    name: "Lot overview"
+    role: lot
+    source: path/to/lot_clip.mp4
+    geometry: my_site_geometry.json#lot
+    stride: 3
+    stationary_seconds: 10     # real footage: use a longer window than the demo
+    reid_radius_px: 45
+  - id: exit
+    name: "Exit gate"
+    role: exit
+    source: path/to/exit_clip.mp4
+    geometry: my_site_geometry.json#exit
+    direction: down

@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ParkWatch Live</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #181c22; --panel2: #1f242c; --line: #2a303a; --text: #e8ebf0; --muted: #8f99a8;
+    --green: #3fbf6f; --red: #f0555a; --amber: #f5b53d; --blue: #4ea1f5; --grey: #7b8594;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--panel); position: sticky; top: 0; z-index: 2; }
+  header h1 { font-size: 18px; margin: 0; letter-spacing: .3px; }
+  .badge { font-size: 12px; padding: 3px 8px; border-radius: 99px; background: #26303c; color: var(--muted); }
+  .badge.live { background: rgba(240,85,90,.15); color: var(--red); }
+  .clock { margin-left: auto; font-variant-numeric: tabular-nums; font-size: 20px; }
+  main { padding: 16px 20px 40px; display: grid; gap: 16px; max-width: 1800px; margin: 0 auto; }
+  .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+  .kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; border-left: 4px solid var(--grey); }
+  .kpi .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+  .kpi .value { font-size: 30px; font-weight: 650; font-variant-numeric: tabular-nums; margin-top: 2px; }
+  .kpi .sub { color: var(--muted); font-size: 12px; }
+  .cams { display: grid; grid-template-columns: 1fr 1.6fr 1fr; gap: 12px; align-items: start; }
+  .cam { background: #000; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+  .cam img { width: 100%; display: block; aspect-ratio: 16 / 9; object-fit: contain; background: #05070a; }
+  .cam .title { padding: 6px 10px; color: var(--muted); font-size: 12px; background: var(--panel); }
+  .grid2 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 14px; min-width: 0; }
+  .panel h2 { margin: 0 0 10px; font-size: 13px; text-transform: uppercase; letter-spacing: .8px; color: var(--muted); }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 7px 8px; border-bottom: 1px solid #222831; vertical-align: middle; }
+  td.plate { font-weight: 650; letter-spacing: .5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .pill { font-size: 11px; font-weight: 650; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
+  .PARKED { background: rgba(63,191,111,.15); color: var(--green); }
+  .ENTERED, .LEAVING { background: rgba(245,181,61,.15); color: var(--amber); }
+  .OVERSTAY { background: rgba(240,85,90,.2); color: var(--red); }
+  .EXITED { background: #262c35; color: var(--grey); }
+  .EXITED_OVERSTAY { background: rgba(240,120,60,.18); color: #f08a4b; }
+  .thumb { height: 34px; border-radius: 4px; border: 1px solid var(--line); cursor: zoom-in; }
+  .muted { color: var(--muted); }
+  .alert { padding: 8px 10px; border-radius: 8px; background: rgba(240,85,90,.08); border: 1px solid rgba(240,85,90,.25); margin-bottom: 8px; }
+  .alert .when { color: var(--red); font-weight: 650; margin-right: 6px; font-variant-numeric: tabular-nums; }
+  .alert img { height: 48px; margin: 6px 6px 0 0; border-radius: 4px; }
+  .kv { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; font-size: 13px; }
+  .kv div:nth-child(odd) { color: var(--muted); }
+  .tablewrap { overflow-x: auto; }
+  #zoom { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: none; align-items: center; justify-content: center; z-index: 5; }
+  #zoom img { max-width: 90vw; max-height: 90vh; border-radius: 8px; }
+  @media (max-width: 1100px) { .kpis { grid-template-columns: repeat(3, 1fr); } .cams, .grid2 { grid-template-columns: 1fr; } }
+  @media (max-width: 600px) { main { padding: 12px 16px; } .kpis { grid-template-columns: repeat(2, 1fr); } header { flex-wrap: wrap; } }
+</style>
+</head>
+<body>
+<header>
+  <h1 id="site">ParkWatch</h1>
+  <span class="badge" id="mode">connecting...</span>
+  <span class="badge" id="limit"></span>
+  <span class="clock" id="clock">--:--:--</span>
+</header>
+<main>
+  <section class="kpis">
+    <div class="kpi" id="k-free"><div class="label">Free spaces</div><div class="value">-</div><div class="sub">capacity - (in - out)</div></div>
+    <div class="kpi" style="border-left-color:var(--blue)"><div class="label">Occupied</div><div class="value" id="k-occ">-</div><div class="sub" id="k-inout"></div></div>
+    <div class="kpi" style="border-left-color:var(--green)"><div class="label">Parked (tracked)</div><div class="value" id="k-parked">-</div><div class="sub">lot camera</div></div>
+    <div class="kpi" id="k-over"><div class="label">Overstaying now</div><div class="value">-</div><div class="sub" id="k-over-sub"></div></div>
+    <div class="kpi" style="border-left-color:var(--grey)"><div class="label">Closed visits</div><div class="value" id="k-closed">-</div><div class="sub" id="k-closed-sub"></div></div>
+    <div class="kpi" style="border-left-color:var(--amber)"><div class="label">LLM plate calls</div><div class="value" id="k-llm">-</div><div class="sub" id="k-llm-sub"></div></div>
+  </section>
+  <section class="cams" id="cams"></section>
+  <section class="grid2">
+    <div class="panel">
+      <h2>Vehicles</h2>
+      <div class="tablewrap"><table>
+        <thead><tr><th>Plate</th><th>Status</th><th>Entered</th><th>Exited</th><th>Time on site</th><th>Bay</th><th>Matched by</th><th>Evidence</th></tr></thead>
+        <tbody id="rows"></tbody>
+      </table></div>
+    </div>
+    <div style="display:grid; gap:16px; align-content:start">
+      <div class="panel"><h2>Alerts</h2><div id="alerts" class="muted">No alerts yet.</div></div>
+      <div class="panel"><h2>Plate reading</h2><div class="kv" id="plates"></div></div>
+    </div>
+  </section>
+</main>
+<div id="zoom" onclick="this.style.display='none'"><img alt="evidence"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+let camsBuilt = "";
+
+const shown = {};
+function setHTML(id, html) { if (shown[id] !== html) { shown[id] = html; $(id).innerHTML = html; } }  // no flicker, no image reloads
+
+function zoom(src) { const z = $("zoom"); z.querySelector("img").src = src; z.style.display = "flex"; }
+
+function buildCams(cams) {
+  const key = cams.join(",");
+  if (key === camsBuilt) return;
+  camsBuilt = key;
+  const order = [...cams].sort((a, b) => (a.includes("lot") ? 1 : 0) - (b.includes("lot") ? 1 : 0));
+  const lot = order.filter((c) => c.includes("lot"));
+  const others = order.filter((c) => !c.includes("lot"));
+  const seq = others.length >= 2 && lot.length ? [others[0], lot[0], others[1], ...others.slice(2)] : order;
+  $("cams").innerHTML = seq.map((c) =>
+    `<div class="cam"><img src="/stream/${encodeURIComponent(c)}" alt="${esc(c)} camera"><div class="title">${esc(c)}</div></div>`).join("");
+}
+
+function render(s) {
+  const site = s.site || {};
+  const plates = s.plates || {};
+  $("site").textContent = site.site || "ParkWatch";
+  $("clock").textContent = site.now || "--:--:--";
+  $("mode").textContent = site.time_scale && site.time_scale !== 1 ? `replay x${site.time_scale} clock` : "live";
+  $("mode").className = "badge" + (site.time_scale === 1 ? " live" : "");
+  $("limit").textContent = `overstay limit ${site.limit}`;
+  const free = $("k-free");
+  free.querySelector(".value").textContent = `${site.free}/${site.capacity}`;
+  free.style.borderLeftColor = site.free > 0 ? "var(--green)" : "var(--red)";
+  $("k-occ").textContent = site.occupied;
+  $("k-inout").textContent = `${site.entries} in / ${site.exits} out`;
+  const c = site.counts || {};
+  $("k-parked").textContent = (c.PARKED || 0) + (c.OVERSTAY || 0);
+  const over = $("k-over");
+  over.querySelector(".value").textContent = c.OVERSTAY || 0;
+  over.style.borderLeftColor = c.OVERSTAY ? "var(--red)" : "var(--grey)";
+  $("k-over-sub").textContent = `${c.EXITED_OVERSTAY || 0} left late`;
+  $("k-closed").textContent = (c.EXITED || 0) + (c.EXITED_OVERSTAY || 0);
+  $("k-closed-sub").textContent = "entry + exit matched";
+  const llm = plates.llm || {};
+  $("k-llm").textContent = llm.ok ?? 0;
+  $("k-llm-sub").textContent = `$${(plates.llm_cost_usd || 0).toFixed(3)} est. · ${llm.errors || 0} errors`;
+  buildCams(s.cameras || []);
+  setHTML("rows", (site.sessions || []).map((r) => {
+    const ev = [r.entry_evidence, r.exit_evidence].filter(Boolean)
+      .map((e) => `<img class="thumb" src="/evidence/${encodeURIComponent(e)}" onclick="zoom(this.src)" alt="plate evidence">`).join(" ");
+    const plate = r.plate ? esc(r.plate) + (r.plate_valid ? "" : " <span class='muted' title='not checksum-verified'>?</span>")
+                          : `<span class="muted">${esc(r.vid)}</span>`;
+    return `<tr><td class="plate">${plate}</td><td><span class="pill ${esc(r.status)}">${esc(r.status.replace("_", " "))}</span></td>
+      <td>${esc(r.entry || "-")}</td><td>${esc(r.exit || "-")}</td><td>${esc(r.duration)}</td><td>${esc(r.bay || "-")}</td>
+      <td class="muted">${esc(r.matched_by || (r.notes && r.notes[0]) || "")}</td><td>${ev}</td></tr>`;
+  }).join(""));
+  const alerts = site.alerts || [];
+  setHTML("alerts", alerts.length ? alerts.map((a) =>
+    `<div class="alert"><span class="when">${esc(a.time)}</span>${esc(a.message)}<div>${(a.evidence || [])
+      .map((e) => `<img src="/evidence/${encodeURIComponent(e)}" onclick="zoom(this.src)" alt="alert evidence">`).join("")}</div></div>`).join("")
+    : "No alerts yet.");
+  const v = plates.vehicles || {};
+  const rows = [["Vehicles sent", v.requested], ["Read", v.read], ["Checksum-valid", v.valid], ["Unreadable", v.unreadable]];
+  for (const r of plates.readers || []) {
+    const st = plates[r.name] || {};
+    rows.push([`${r.name} reader`, r.available ? `${st.ok || 0} ok · ${st.errors || 0} err · ${st.calls ? Math.round(st.ms / st.calls) : 0} ms` : `off (${r.note})`]);
+  }
+  setHTML("plates", rows.map(([k, val]) => `<div>${esc(k)}</div><div>${esc(val ?? 0)}</div>`).join(""));
+}
+
+async function poll() {
+  try {
+    const r = await fetch("/api/state", {cache: "no-store"});
+    if (r.ok) render(await r.json());
+  } catch (e) { $("mode").textContent = "disconnected"; }
+  setTimeout(poll, 1000);
+}
+poll();
+</script>
+</body>
+</html>

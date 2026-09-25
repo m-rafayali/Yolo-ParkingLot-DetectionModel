@@ -1,0 +1,15 @@
+# BoT-SORT tuned for fixed CCTV cameras watching slow vehicles.
+# Tracker IDs are NOT identity (constraint C4) - the lot camera re-attaches lost IDs by position,
+# and the gate cameras suppress duplicate crossings - but fewer ID switches still helps.
+tracker_type: botsort
+track_high_thresh: 0.25
+track_low_thresh: 0.1
+new_track_thresh: 0.3
+track_buffer: 60        # frames a lost track is kept alive (cars are occluded by other cars / barriers)
+match_thresh: 0.8
+fuse_score: True
+gmc_method: none        # cameras are fixed: skip global motion compensation (saves CPU, avoids drift)
+proximity_thresh: 0.5
+appearance_thresh: 0.8
+with_reid: False
+model: auto

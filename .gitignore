@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# run outputs, generated data
+runs/
+datasets/
+assets/demo/*.mp4
+
+# model weights: official ones are downloaded automatically by name; keep only the twin model
+*.pt
+!models/twin_obb.pt
+*.onnx
+*.engine
