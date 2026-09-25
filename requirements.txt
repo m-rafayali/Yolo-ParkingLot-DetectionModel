@@ -10,6 +10,10 @@ requests
 # Free, offline plate reader (ONNX plate detector + OCR). Downloads ~11 MB of models on first use.
 fast-alpr>=0.3
 
+lap==0.5.12
+fast-alpr[onnx]==0.1.4
+
+
 # Optional
 imageio-ffmpeg          # H.264 encoding of the generated demo videos (smaller, browser-playable)
 pytest                  # tests
